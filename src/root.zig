@@ -261,55 +261,61 @@ pub const Definition = struct {
             try out.print("\n{s}\n", .{definition.help_description.?});
         }
 
-        try out.print("\npositional arguments:\n", .{});
-
         // Print Positionals
-        for (definition.positionals) |positional| {
-            try out.print(" {s}", .{positional.name});
+        if (definition.positionals.len > 0) {
+            try out.print("\nPositional arguments:\n", .{});
 
-            if (positional.desc != null) {
-                try out.print("    {s}", .{positional.desc.?});
+            for (definition.positionals) |positional| {
+                try out.print(" {s}", .{positional.name});
+
+                if (positional.desc != null) {
+                    try out.print("    {s}", .{positional.desc.?});
+                }
+
+                try out.print("\n", .{});
             }
-
-            try out.print("\n", .{});
         }
 
-        try out.print("\noptions:\n", .{});
+        if (definition.flags.len > 0 or definition.optionals.len > 0) try out.print("\nOptions:\n", .{});
 
         // Print Flags
-        for (definition.flags) |flag| {
-            if (flag.short != null) {
-                try out.print(" -{c},", .{flag.short.?});
+        if (definition.flags.len > 0) {
+            for (definition.flags) |flag| {
+                if (flag.short != null) {
+                    try out.print(" -{c},", .{flag.short.?});
+                }
+
+                try out.print(" --{s}", .{flag.name});
+
+                if (flag.desc != null) {
+                    try out.print("    {s}", .{flag.desc.?});
+                }
+
+                try out.print("\n", .{});
             }
-
-            try out.print(" --{s}", .{flag.name});
-
-            if (flag.desc != null) {
-                try out.print("    {s}", .{flag.desc.?});
-            }
-
-            try out.print("\n", .{});
         }
 
         // Print Options
-        for (definition.optionals) |optional| {
-            if (optional.short != null) {
-                try out.print(" -{c},", .{optional.short.?});
+        if (definition.optionals.len > 0) {
+            for (definition.optionals) |optional| {
+                if (optional.short != null) {
+                    try out.print(" -{c},", .{optional.short.?});
+                }
+
+                try out.print(" --{s}", .{optional.name});
+
+                const value_name = try allocator.alloc(u8, optional.name.len);
+                defer allocator.free(value_name);
+                _ = std.ascii.upperString(value_name, optional.name);
+
+                try out.print(" {s}", .{value_name});
+
+                if (optional.desc != null) {
+                    try out.print("    {s}", .{optional.desc.?});
+                }
+
+                try out.print("\n", .{});
             }
-
-            try out.print(" --{s}", .{optional.name});
-
-            const value_name = try allocator.alloc(u8, optional.name.len);
-            defer allocator.free(value_name);
-            _ = std.ascii.upperString(value_name, optional.name);
-
-            try out.print(" {s}", .{value_name});
-
-            if (optional.desc != null) {
-                try out.print("    {s}", .{optional.desc.?});
-            }
-
-            try out.print("\n", .{});
         }
 
         try bw.flush();
@@ -343,12 +349,14 @@ pub const Definition = struct {
             flag_enum_fields[i] = std.builtin.Type.EnumField{ .name = flag.name, .value = i };
         }
 
-        const FlagEnum = @Type(.{ .@"enum" = .{
-            .decls = &.{},
-            .tag_type = std.math.IntFittingRange(0, flag_enum_fields.len - 1),
-            .fields = &flag_enum_fields,
-            .is_exhaustive = true,
-        } });
+        const FlagEnum = @Type(.{
+            .@"enum" = .{
+                .decls = &.{},
+                .tag_type = std.math.IntFittingRange(0, if (flag_enum_fields.len > 0) flag_enum_fields.len - 1 else 0),
+                .fields = &flag_enum_fields,
+                .is_exhaustive = true,
+            },
+        });
 
         // Optionals
         var optional_enum_fields: [optionals.len]std.builtin.Type.EnumField = undefined;
@@ -357,12 +365,14 @@ pub const Definition = struct {
             optional_enum_fields[i] = std.builtin.Type.EnumField{ .name = optional.name, .value = i };
         }
 
-        const OptionalEnum = @Type(.{ .@"enum" = .{
-            .decls = &.{},
-            .tag_type = std.math.IntFittingRange(0, optional_enum_fields.len - 1),
-            .fields = &optional_enum_fields,
-            .is_exhaustive = true,
-        } });
+        const OptionalEnum = @Type(.{
+            .@"enum" = .{
+                .decls = &.{},
+                .tag_type = std.math.IntFittingRange(0, if (optional_enum_fields.len > 0) optional_enum_fields.len - 1 else 0),
+                .fields = &optional_enum_fields,
+                .is_exhaustive = true,
+            },
+        });
 
         // Positionals
         var positional_enum_fields: [positionals.len]std.builtin.Type.EnumField = undefined;
@@ -371,12 +381,14 @@ pub const Definition = struct {
             positional_enum_fields[i] = std.builtin.Type.EnumField{ .name = positional.name, .value = i };
         }
 
-        const PositionalEnum = @Type(.{ .@"enum" = .{
-            .decls = &.{},
-            .tag_type = std.math.IntFittingRange(0, positional_enum_fields.len - 1),
-            .fields = &positional_enum_fields,
-            .is_exhaustive = true,
-        } });
+        const PositionalEnum = @Type(.{
+            .@"enum" = .{
+                .decls = &.{},
+                .tag_type = std.math.IntFittingRange(0, if (positional_enum_fields.len > 0) positional_enum_fields.len - 1 else 0),
+                .fields = &positional_enum_fields,
+                .is_exhaustive = true,
+            },
+        });
 
         var definition = Definition{
             .flags = flags,
@@ -422,7 +434,7 @@ pub fn deinit() void {
 ///   - `error.MissingArgument`
 ///   - `null`
 ///   - specified `ResultSet` instance
-/// 
+///
 /// If this function returns null, it indicates that it encountered a 'help' argument (and that the definition had `add_help = true`) and therefore the program should halt.
 pub fn parse(definition: *const Definition) !?definition.ResultSet {
     var result_set: definition.ResultSet = .{};
@@ -440,6 +452,7 @@ pub fn parse(definition: *const Definition) !?definition.ResultSet {
 
         if (arg[0] == '-') {
             if (arg.len < 2) {
+                std.log.err("Invalid argument '{s}'.", .{arg});
                 return error.InvalidArgument;
             }
 
@@ -447,54 +460,13 @@ pub fn parse(definition: *const Definition) !?definition.ResultSet {
             if (arg[1] == '-') {
                 // Optional / Long flag
                 if (arg.len < 3) {
+                    std.log.err("Invalid argument '{s}'.", .{arg});
                     return error.InvalidArgument;
                 }
 
-                // Test for flag
-                const flag_enum = definition.getFlagEnum(.{ .long = arg[2..] });
-
-                if (flag_enum != null) {
-                    if (definition.add_help) {
-                        if (flag_enum == definition.FlagEnum.help) {
-                            try definition.printHelp(std.io.getStdOut().writer());
-                            return null;
-                        }
-                    }
-
-                    const index = definition.getFlagIndex(flag_enum.?);
-                    result_set.flags[index] = true;
-
-                    continue;
-                }
-
-                // Handle Optional
-                const optional_enum = definition.getOptionalEnum(.{ .long = arg[2..] });
-                if (optional_enum != null) {
-                    const index = definition.getOptionalIndex(optional_enum.?);
-                    result_set.optionals[index] = args[i + 1];
-                    i += 1;
-
-                    continue;
-                }
-
-                std.log.err("Invalid argument '{s}'.", .{arg});
-                return error.InvalidArgument;
-            } else {
-                if (arg[1..].len == 1) {
-                    // Possibly a short form optional
-                    const optional_enum = definition.getOptionalEnum(.{ .short = arg[1] });
-                    if (optional_enum != null) {
-                        const index = definition.getOptionalIndex(optional_enum.?);
-                        result_set.optionals[index] = args[i + 1];
-                        i += 1;
-
-                        continue;
-                    } // Else treat as a flag and continue to flag processing
-                }
-
-                // Short flag(s)
-                for (arg[1..]) |short_flag| {
-                    const flag_enum = definition.getFlagEnum(.{ .short = short_flag });
+                // Handle Flag
+                if (definition.flags.len > 0) {
+                    const flag_enum = definition.getFlagEnum(.{ .long = arg[2..] });
 
                     if (flag_enum != null) {
                         if (definition.add_help) {
@@ -509,31 +481,88 @@ pub fn parse(definition: *const Definition) !?definition.ResultSet {
 
                         continue;
                     }
+                }
 
-                    std.log.err("Invalid argument '{c}'.", .{short_flag});
+                // Handle Optional
+                if (definition.optionals.len > 0) {
+                    const optional_enum = definition.getOptionalEnum(.{ .long = arg[2..] });
+                    if (optional_enum != null) {
+                        const index = definition.getOptionalIndex(optional_enum.?);
+                        result_set.optionals[index] = args[i + 1];
+                        i += 1;
+
+                        continue;
+                    }
+                }
+
+                std.log.err("Invalid argument '{s}'.", .{arg});
+                return error.InvalidArgument;
+            } else {
+                if (arg[1..].len == 1) {
+                    if (definition.optionals.len > 0) {
+                        // Possibly a short form optional
+                        const optional_enum = definition.getOptionalEnum(.{ .short = arg[1] });
+                        if (optional_enum != null) {
+                            const index = definition.getOptionalIndex(optional_enum.?);
+                            result_set.optionals[index] = args[i + 1];
+                            i += 1;
+
+                            continue;
+                        } // Else treat as a flag and continue to flag processing
+                    }
+                }
+
+                // Short flag(s)
+                if (definition.flags.len > 0) {
+                    for (arg[1..]) |short_flag| {
+                        const flag_enum = definition.getFlagEnum(.{ .short = short_flag });
+
+                        if (flag_enum != null) {
+                            if (definition.add_help) {
+                                if (flag_enum == definition.FlagEnum.help) {
+                                    try definition.printHelp(std.io.getStdOut().writer());
+                                    return null;
+                                }
+                            }
+
+                            const index = definition.getFlagIndex(flag_enum.?);
+                            result_set.flags[index] = true;
+
+                            continue;
+                        }
+
+                        std.log.err("Invalid argument '{c}'.", .{short_flag});
+                        return error.InvalidArgument;
+                    }
+                } else {
+                    std.log.err("Invalid argument '{s}'.", .{arg});
                     return error.InvalidArgument;
                 }
             }
         } else {
             // Positional
-            if (positional_index >= definition.positionals.len) {
-                std.log.err("Unexpected positional argument '{s}'.", .{arg});
-                return error.InvalidArgument;
-            }
+            if (definition.positionals.len > 0) {
+                if (positional_index >= definition.positionals.len) {
+                    std.log.err("Unexpected positional argument '{s}'.", .{arg});
+                    return error.InvalidArgument;
+                }
 
-            result_set.positionals[positional_index] = arg;
-            positional_index += 1;
+                result_set.positionals[positional_index] = arg;
+                positional_index += 1;
+            }
         }
     }
 
     // Check for missing possitionals and fill with default values.
-    for (definition.positionals[positional_index..], positional_index..) |positional, j| {
-        if (positional.default_value == null) {
-            std.log.err("Missing positional argument '{s}'.", .{positional.name});
-            return error.MissingArgument;
-        }
+    if (definition.positionals.len > 0) {
+        for (definition.positionals[positional_index..], positional_index..) |positional, j| {
+            if (positional.default_value == null) {
+                std.log.err("Missing positional argument '{s}'.", .{positional.name});
+                return error.MissingArgument;
+            }
 
-        result_set.positionals[j] = positional.default_value.?;
+            result_set.positionals[j] = positional.default_value.?;
+        }
     }
 
     return result_set;

@@ -39,7 +39,5 @@ pub fn main() !void {
 
     result_set.log();
 
-    if (result_set.getFlag(.test_long)) {
-        std.log.debug("test long found", .{});
-    }
+    if (result_set.getFlag(.test_long)) std.log.debug("Test long detected!", .{});
 }
