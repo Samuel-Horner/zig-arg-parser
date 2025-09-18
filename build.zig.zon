@@ -1,0 +1,18 @@
+.{
+    .name = .zig_arg_parser,
+
+    .version = "0.0.0",
+
+    .fingerprint = 0xa6babafb7eb51996, // Changing this has security and trust implications.
+
+    .minimum_zig_version = "0.14.1",
+
+    .dependencies = .{
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
