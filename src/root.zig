@@ -21,7 +21,7 @@
 //!     defer args.deinit();
 //!
 //!     const result_set = args.parse(&args_definition) catch {
-//!         try args_definition.printHelp(std.io.getStdOut().writer());
+//!         try args_definition.printHelp();
 //!         return; // Dont double print error message
 //!     } orelse {
 //!         return; // If argparse returns null, the program should not continue (a.k.a help argument encountered)
@@ -216,10 +216,11 @@ pub const Definition = struct {
         return @intFromEnum(optional_enum);
     }
 
-    /// Prints the programs help message, generated from defined arguments, to the supplied writer
-    pub fn printHelp(definition: *const Definition, writer: std.fs.File.Writer) !void {
-        var bw = std.io.bufferedWriter(writer);
-        const out = bw.writer();
+    /// Prints the programs help message, generated from defined arguments, to stdout.
+    pub fn printHelp(definition: *const Definition) !void {
+        var out_buffer: [1024]u8 = undefined;
+        var out_writer = std.fs.File.stdout().writer(&out_buffer);
+        const out = &out_writer.interface;
 
         try out.print("Usage: {s}", .{args[0]});
 
@@ -318,7 +319,7 @@ pub const Definition = struct {
             }
         }
 
-        try bw.flush();
+        try out.flush();
     }
 
     /// Initialises the argument definitions, creates argument enums, and creates a specified ResultSet type.
@@ -471,7 +472,7 @@ pub fn parse(definition: *const Definition) !?definition.ResultSet {
                     if (flag_enum != null) {
                         if (definition.add_help) {
                             if (flag_enum == definition.FlagEnum.help) {
-                                try definition.printHelp(std.io.getStdOut().writer());
+                                try definition.printHelp();
                                 return null;
                             }
                         }
@@ -520,7 +521,7 @@ pub fn parse(definition: *const Definition) !?definition.ResultSet {
                         if (flag_enum != null) {
                             if (definition.add_help) {
                                 if (flag_enum == definition.FlagEnum.help) {
-                                    try definition.printHelp(std.io.getStdOut().writer());
+                                    try definition.printHelp();
                                     return null;
                                 }
                             }

@@ -31,7 +31,7 @@ pub fn main() !void {
     defer args.deinit();
 
     const result_set: args_definition.ResultSet = args.parse(&args_definition) catch {
-        try args_definition.printHelp(std.io.getStdOut().writer());
+        try args_definition.printHelp();
         return; // Dont double print error message
     } orelse {
         return; // If argparse returns null, the program should not continue (a.k.a help argument encountered)
