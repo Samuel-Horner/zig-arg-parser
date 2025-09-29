@@ -72,22 +72,22 @@ pub const Positional = struct {
 
 /// Result Set Type Function.
 /// Used by `Definition.init(...)`.
-pub fn ResultSet(comptime flags_len: comptime_int, comptime optionals: []const Optional, comptime positionals_len: comptime_int, comptime definition: Definition) type {
+pub fn ResultSet(comptime definition: Definition) type {
     return struct {
         /// Flag values, use `getFlag` to retrieve.
-        flags: [flags_len]bool = @splat(false),
+        flags: [definition.flags.len]bool = @splat(false),
 
         /// Optionl values, use `getOptional` to retrieve.
-        optionals: [optionals.len]?[]const u8 = blk: {
-            var default_optional_values: [optionals.len]?[]const u8 = undefined;
-            for (optionals, 0..) |optional, i| {
+        optionals: [definition.optionals.len]?[]const u8 = blk: {
+            var default_optional_values: [definition.optionals.len]?[]const u8 = undefined;
+            for (definition.optionals, 0..) |optional, i| {
                 default_optional_values[i] = optional.default_value;
             }
             break :blk default_optional_values;
         },
 
         /// Positional values, use `getPositional` to retrieve.
-        positionals: [positionals_len][]const u8 = undefined,
+        positionals: [definition.positionals.len][]const u8 = undefined,
 
         const Self = @This();
 
@@ -162,9 +162,6 @@ pub const Definition = struct {
     add_help: bool,
     /// A description of the program displayed in its help message
     help_description: ?[]const u8,
-
-    /// Specified ResultSet
-    ResultSet: type,
 
     fn getFlagEnum(definition: *const Definition, name: union(enum) { long: []const u8, short: u8 }) ?definition.FlagEnum {
         switch (name) {
@@ -391,7 +388,7 @@ pub const Definition = struct {
             },
         });
 
-        var definition = Definition{
+        return Definition{
             .flags = flags,
             .optionals = optionals,
             .positionals = positionals,
@@ -402,13 +399,7 @@ pub const Definition = struct {
 
             .add_help = definition_args.add_help,
             .help_description = definition_args.help_description,
-
-            .ResultSet = undefined,
         };
-
-        definition.ResultSet = ResultSet(flags.len, optionals, positionals.len, definition);
-
-        return definition;
     }
 };
 
@@ -437,8 +428,8 @@ pub fn deinit() void {
 ///   - specified `ResultSet` instance
 ///
 /// If this function returns null, it indicates that it encountered a 'help' argument (and that the definition had `add_help = true`) and therefore the program should halt.
-pub fn parse(definition: *const Definition) !?definition.ResultSet {
-    var result_set: definition.ResultSet = .{};
+pub fn parse(definition: *const Definition) !?ResultSet(definition.*) {
+    var result_set: ResultSet(definition.*) = .{};
 
     var positional_index: usize = 0;
 

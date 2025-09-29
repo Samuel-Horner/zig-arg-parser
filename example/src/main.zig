@@ -30,7 +30,7 @@ pub fn main() !void {
     try args.init(gpa.allocator());
     defer args.deinit();
 
-    const result_set: args_definition.ResultSet = args.parse(&args_definition) catch {
+    const result_set: args.ResultSet(args_definition) = args.parse(&args_definition) catch {
         try args_definition.printHelp();
         return; // Dont double print error message
     } orelse {
