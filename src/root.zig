@@ -208,11 +208,11 @@ pub const Definition = struct {
         return @intFromEnum(optional_enum);
     }
 
-    fn getPositionalEnum(definition: *const Definition, name: []const u8) ?definition.OptionalEnum {
+    fn getPositionalEnum(definition: *const Definition, name: []const u8) ?definition.PositionalEnum {
         return std.meta.stringToEnum(definition.PositionalEnum, name);
     }
 
-    fn getPositionalIndex(definition: *const Definition, optional_enum: definition.OptionalEnum) usize {
+    fn getPositionalIndex(definition: *const Definition, optional_enum: definition.PositionalEnum) usize {
         return @intFromEnum(optional_enum);
     }
 
