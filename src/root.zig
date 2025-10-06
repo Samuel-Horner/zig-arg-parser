@@ -27,6 +27,8 @@
 //!         return; // If argparse returns null, the program should not continue (a.k.a help argument encountered)
 //!     };
 //!
+//!     if (result_set.getFlag(.foo)) std.log.debug("Foo flag encountered!", .{});
+//!
 //!     result_set.log();
 //! }
 //! ```

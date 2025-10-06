@@ -1,24 +1,11 @@
 const std = @import("std");
 const args = @import("zig_arg_parser");
 
-const args_definition = args.Definition.init(
-    &.{ // Flags (aka boolean 'is present' checks)
-        .{ .name = "test_long" },
-        .{ .name = "a_test_short", .short = 'a', .desc = "Test Short." },
-        .{ .name = "b_test_short", .short = 'b' },
-    },
-    &.{ // Optionals (aka arguments which require a value)
-        .{ .name = "test_optional", .default_value = null },
-        .{ .name = "test_short_optional", .short = 'o', .default_value = "def" },
-    },
-    &.{ // Positionals
-        .{ .name = "test_positional" },
-        .{ .name = "test_positional_optional", .default_value = "123" },
-    },
-    .{
-        .add_help = true,
-        .help_description = "Hello World",
-    },
+const args_def = args.Definition.init(
+    &.{ .{ .name = "foo" } }, // Flags
+    &.{ .{ .name = "foo", .default_value = null } }, // Optionals
+    &.{ .{ .name = "foo" } }, // Positionals
+    .{} // Optional Arguments
 );
 
 pub fn main() !void {
@@ -30,14 +17,14 @@ pub fn main() !void {
     try args.init(gpa.allocator());
     defer args.deinit();
 
-    const result_set: args.ResultSet(args_definition) = args.parse(&args_definition) catch {
-        try args_definition.printHelp();
+    const result_set: args.ResultSet(args_def) = args.parse(&args_def) catch {
+        try args_def.printHelp();
         return; // Dont double print error message
     } orelse {
         return; // If argparse returns null, the program should not continue (a.k.a help argument encountered)
     };
 
-    result_set.log();
+    if (result_set.getFlag(.foo)) std.log.debug("Foo flag encountered!", .{});
 
-    if (result_set.getFlag(.test_long)) std.log.debug("Test long detected!", .{});
+    result_set.log();
 }
