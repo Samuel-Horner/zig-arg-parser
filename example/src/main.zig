@@ -3,8 +3,8 @@ const args = @import("zig_arg_parser");
 
 const args_def = args.Definition.init(
     &.{ .{ .name = "foo" } }, // Flags
-    &.{ .{ .name = "foo", .default_value = null } }, // Optionals
-    &.{ .{ .name = "foo" } }, // Positionals
+    &.{ .{ .name = "bar", .default_value = null } }, // Optionals
+    &.{ .{ .name = "car" } }, // Positionals
     .{} // Optional Arguments
 );
 
