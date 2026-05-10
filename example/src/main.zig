@@ -8,16 +8,13 @@ const args_def = args.Definition.init(
     .{} // Optional Arguments
 );
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    defer if (gpa.deinit() == .leak) {
-        std.log.err("GPA detected memory leaks when deinit-ing.", .{});
-    };
+pub fn main(init: std.process.Init) !void {
+    const arena = init.arena;
 
-    try args.init(gpa.allocator());
+    try args.init(arena.allocator(), init.minimal.args, init.io);
     defer args.deinit();
 
-    const result_set: args.ResultSet(args_def) = args.parse(&args_def) catch {
+    const result_set: args.ResultSet(args_def) = args.parse(args_def) catch {
         try args_def.printHelp();
         return; // Dont double print error message
     } orelse {

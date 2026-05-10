@@ -2,36 +2,33 @@
 //!
 //! Example usage:
 //! ``` Zig
-//! const std = @import("std");
-//! const args = @import("zig_arg_parser");
-//! 
-//! const args_def = args.Definition.init(
-//!     &.{ .{ .name = "foo" } }, // Flags
-//!     &.{ .{ .name = "bar", .default_value = null } }, // Optionals
-//!     &.{ .{ .name = "car" } }, // Positionals
-//!     .{} // Optional Arguments
-//! );
-//! 
-//! pub fn main() !void {
-//!     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-//!     defer if (gpa.deinit() == .leak) {
-//!         std.log.err("GPA detected memory leaks when deinit-ing.", .{});
-//!     };
-//! 
-//!     try args.init(gpa.allocator());
-//!     defer args.deinit();
-//! 
-//!     const result_set: args.ResultSet(args_def) = args.parse(&args_def) catch {
-//!         try args_def.printHelp();
-//!         return; // Dont double print error message
-//!     } orelse {
-//!         return; // If argparse returns null, the program should not continue (a.k.a help argument encountered)
-//!     };
-//! 
-//!     if (result_set.getFlag(.foo)) std.log.debug("Foo flag encountered!", .{});
-//! 
-//!     result_set.log();
-//! }
+//!const std = @import("std");
+//!const args = @import("zig_arg_parser");
+//!
+//!const args_def = args.Definition.init(
+//!    &.{ .{ .name = "foo" } }, // Flags
+//!    &.{ .{ .name = "bar", .default_value = null } }, // Optionals
+//!    &.{ .{ .name = "car" } }, // Positionals
+//!    .{} // Optional Arguments
+//!);
+//!
+//!pub fn main(init: std.process.Init) !void {
+//!    const arena = init.arena;
+//!
+//!    try args.init(arena.allocator(), init.minimal.args, init.io);
+//!    defer args.deinit();
+//!
+//!    const result_set: args.ResultSet(args_def) = args.parse(args_def) catch {
+//!        try args_def.printHelp();
+//!        return; // Dont double print error message
+//!    } orelse {
+//!        return; // If argparse returns null, the program should not continue (a.k.a help argument encountered)
+//!    };
+//!
+//!    if (result_set.getFlag(.foo)) std.log.debug("Foo flag encountered!", .{});
+//!
+//!    result_set.log();
+//!}
 //! ```
 
 const std = @import("std");
@@ -166,7 +163,7 @@ pub const Definition = struct {
     /// A description of the program displayed in its help message
     help_description: ?[]const u8,
 
-    fn getFlagEnum(definition: *const Definition, name: union(enum) { long: []const u8, short: u8 }) ?definition.FlagEnum {
+    fn getFlagEnum(definition: Definition, name: union(enum) { long: []const u8, short: u8 }) ?definition.FlagEnum {
         switch (name) {
             .long => |long| {
                 return std.meta.stringToEnum(definition.FlagEnum, long);
@@ -183,11 +180,11 @@ pub const Definition = struct {
         }
     }
 
-    fn getFlagIndex(definition: *const Definition, flag_enum: definition.FlagEnum) usize {
+    fn getFlagIndex(definition: Definition, flag_enum: definition.FlagEnum) usize {
         return @intFromEnum(flag_enum);
     }
 
-    fn getOptionalEnum(definition: *const Definition, name: union(enum) { long: []const u8, short: u8 }) ?definition.OptionalEnum {
+    fn getOptionalEnum(definition: Definition, name: union(enum) { long: []const u8, short: u8 }) ?definition.OptionalEnum {
         switch (name) {
             .long => |long| {
                 return std.meta.stringToEnum(definition.OptionalEnum, long);
@@ -204,22 +201,22 @@ pub const Definition = struct {
         }
     }
 
-    fn getOptionalIndex(definition: *const Definition, optional_enum: definition.OptionalEnum) usize {
+    fn getOptionalIndex(definition: Definition, optional_enum: definition.OptionalEnum) usize {
         return @intFromEnum(optional_enum);
     }
 
-    fn getPositionalEnum(definition: *const Definition, name: []const u8) ?definition.PositionalEnum {
+    fn getPositionalEnum(definition: Definition, name: []const u8) ?definition.PositionalEnum {
         return std.meta.stringToEnum(definition.PositionalEnum, name);
     }
 
-    fn getPositionalIndex(definition: *const Definition, optional_enum: definition.PositionalEnum) usize {
+    fn getPositionalIndex(definition: Definition, optional_enum: definition.PositionalEnum) usize {
         return @intFromEnum(optional_enum);
     }
 
     /// Prints the programs help message, generated from defined arguments, to stdout.
     pub fn printHelp(definition: *const Definition) !void {
         var out_buffer: [1024]u8 = undefined;
-        var out_writer = std.fs.File.stdout().writer(&out_buffer);
+        var out_writer = std.Io.File.stdout().writer(io, &out_buffer);
         const out = &out_writer.interface;
 
         try out.print("Usage: {s}", .{args[0]});
@@ -338,58 +335,62 @@ pub const Definition = struct {
         },
     ) Definition {
         // Flags
-        var flags = in_flags;
+        var flags: []const Flag = in_flags;
 
         if (definition_args.add_help) {
             flags = [1]Flag{.{ .name = "help", .short = 'h', .desc = "Prints this message." }} ++ flags;
         }
 
-        var flag_enum_fields: [flags.len]std.builtin.Type.EnumField = undefined;
+        const FlagEnumInt = std.math.IntFittingRange(0, if (flags.len > 0) flags.len - 1 else 0);
+
+        var flag_enum_names: [flags.len][]const u8 = undefined;
+        var flag_enum_values: [flags.len]FlagEnumInt = undefined;
 
         for (flags, 0..) |flag, i| {
-            flag_enum_fields[i] = std.builtin.Type.EnumField{ .name = flag.name, .value = i };
+            flag_enum_names[i] = flag.name;
+            flag_enum_values[i] = i;
         }
 
-        const FlagEnum = @Type(.{
-            .@"enum" = .{
-                .decls = &.{},
-                .tag_type = std.math.IntFittingRange(0, if (flag_enum_fields.len > 0) flag_enum_fields.len - 1 else 0),
-                .fields = &flag_enum_fields,
-                .is_exhaustive = true,
-            },
-        });
+        const FlagEnum = @Enum(
+            FlagEnumInt,
+            .exhaustive,
+            &flag_enum_names,
+            &flag_enum_values,
+        );
 
         // Optionals
-        var optional_enum_fields: [optionals.len]std.builtin.Type.EnumField = undefined;
+        const OptionalEnumInt = std.math.IntFittingRange(0, if (optionals.len > 0) optionals.len - 1 else 0);
 
+        var optional_enum_names: [optionals.len][]const u8 = undefined;
+        var optional_enum_values: [optionals.len]OptionalEnumInt = undefined;
         for (optionals, 0..) |optional, i| {
-            optional_enum_fields[i] = std.builtin.Type.EnumField{ .name = optional.name, .value = i };
+            optional_enum_names[i] = optional.name;
+            optional_enum_values[i] = i;
         }
 
-        const OptionalEnum = @Type(.{
-            .@"enum" = .{
-                .decls = &.{},
-                .tag_type = std.math.IntFittingRange(0, if (optional_enum_fields.len > 0) optional_enum_fields.len - 1 else 0),
-                .fields = &optional_enum_fields,
-                .is_exhaustive = true,
-            },
-        });
+        const OptionalEnum = @Enum(
+            OptionalEnumInt,
+            .exhaustive,
+            &optional_enum_names,
+            &optional_enum_values,
+        );
 
         // Positionals
-        var positional_enum_fields: [positionals.len]std.builtin.Type.EnumField = undefined;
+        const PositionalEnumInt = std.math.IntFittingRange(0, if (positionals.len > 0) positionals.len - 1 else 0);
 
+        var positional_enum_names: [positionals.len][]const u8 = undefined;
+        var positional_enum_values: [positionals.len]PositionalEnumInt = undefined;
         for (positionals, 0..) |positional, i| {
-            positional_enum_fields[i] = std.builtin.Type.EnumField{ .name = positional.name, .value = i };
+            positional_enum_names[i] = positional.name;
+            positional_enum_values[i] = i;
         }
 
-        const PositionalEnum = @Type(.{
-            .@"enum" = .{
-                .decls = &.{},
-                .tag_type = std.math.IntFittingRange(0, if (positional_enum_fields.len > 0) positional_enum_fields.len - 1 else 0),
-                .fields = &positional_enum_fields,
-                .is_exhaustive = true,
-            },
-        });
+        const PositionalEnum = @Enum(
+            PositionalEnumInt,
+            .exhaustive,
+            &positional_enum_names,
+            &positional_enum_values,
+        );
 
         return Definition{
             .flags = flags,
@@ -407,20 +408,21 @@ pub const Definition = struct {
 };
 
 var allocator: std.mem.Allocator = undefined;
-var args: [][:0]u8 = undefined;
+var args: []const [:0]const u8 = undefined;
+var io: std.Io = undefined;
 
 /// Intialises the argument parser, loading arguments into memory.
 /// Call at runtime, with `Definition.init(...)` called at comptime.
-pub fn init(args_allocator: std.mem.Allocator) !void {
+pub fn init(args_allocator: std.mem.Allocator, process_args: std.process.Args, io_instance: std.Io) !void {
     allocator = args_allocator;
-
-    args = try std.process.argsAlloc(allocator);
+    args = try process_args.toSlice(args_allocator);
+    io = io_instance;
 }
 
 /// Frees resources.
 /// After calling this, all slice-based argument values (a.k.a. optional and positional values) will no longer be valid.
 pub fn deinit() void {
-    std.process.argsFree(allocator, args);
+    allocator.free(args);
 }
 
 /// Parses arguments according to the given definition.
@@ -431,8 +433,8 @@ pub fn deinit() void {
 ///   - specified `ResultSet` instance
 ///
 /// If this function returns null, it indicates that it encountered a 'help' argument (and that the definition had `add_help = true`) and therefore the program should halt.
-pub fn parse(definition: *const Definition) !?ResultSet(definition.*) {
-    var result_set: ResultSet(definition.*) = .{};
+pub fn parse(definition: Definition) !?ResultSet(definition) {
+    var result_set: ResultSet(definition) = .{};
 
     var positional_index: usize = 0;
 
